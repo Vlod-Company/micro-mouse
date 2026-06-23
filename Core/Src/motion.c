@@ -9,7 +9,7 @@
 // Коэффициент пересчёта тиков энкодера в миллиметры
 // Если при 1333 тиках (тестовый код) проезжали 180 мм, то:
 // TICKS_PER_MM = 1333 / 180 = 7.405555...
-#define TICKS_PER_MM        7.4056f
+#define TICKS_PER_MM        1.4056f
 
 // Базовая скорость движения (0..MAX_PWM, где MAX_PWM=1000)
 #define BASE_SPEED_FORWARD  750
@@ -30,10 +30,10 @@ extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim5;
 
 static inline int32_t get_left_encoder(void) {
-    return (int32_t)__HAL_TIM_GET_COUNTER(&htim3);
+    return (int32_t)__HAL_TIM_GET_COUNTER(&htim5);
 }
 static inline int32_t get_right_encoder(void) {
-    return (int32_t)__HAL_TIM_GET_COUNTER(&htim5);
+    return (int32_t)__HAL_TIM_GET_COUNTER(&htim3);
 }
 static inline void reset_encoders(void) {
     __HAL_TIM_SET_COUNTER(&htim3, 0);
@@ -64,11 +64,10 @@ void move_forward(int32_t distance_mm) {
     while (1) {
         int32_t left = get_left_encoder();
         int32_t right = get_right_encoder();
-        int32_t avg = (left + right) / 2;
+        int32_t avg = (abs(left) + abs(right)) / 2;
 
         // Проверка достижения цели
-        if (forward && avg >= target_ticks) break;
-        if (!forward && avg <= -target_ticks) break;
+        if (abs(avg) >= target_ticks) break;
 
         // Ошибка прямолинейности: если left > right, то робот поворачивает направо
         int32_t diff = left - right;
@@ -89,7 +88,7 @@ void turn_degrees(int16_t angle_deg) {
     if (angle_deg == 0) return;
     imu_reset_yaw();
     float target = (float)angle_deg;
-    float kp = 1.5f;       // подобрать экспериментально (0.5..3.0)
+    float kp = 10.0f;       // подобрать экспериментально (0.5..3.0)
     float dt = 0.01f;      // 10 мс
     float error;
 
@@ -100,8 +99,14 @@ void turn_degrees(int16_t angle_deg) {
 
         float output = kp * error;
         // Ограничиваем скорость поворота
-        if (output > 800.0f) output = 800.0f;
-        if (output < -800.0f) output = -800.0f;
+        if (output > 0) {
+        	if (output > 999.0f) output = 999.0f;
+        	if (output < 750.0f) output = 750.0f;
+        }
+        else {
+        	if (output < -999.0f) output = -999.0f;
+        	if (output > -750.0f) output = -750.0f;
+        }
 
         // Дифференциальный поворот: левый едет назад, правый вперёд
         motor_set_speed((int16_t)(-output), (int16_t)(output));

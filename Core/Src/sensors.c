@@ -9,17 +9,14 @@
 #include "sensors.h"
 #include "main.h"
 
-static UART_HandleTypeDef* uart_handles[SENSOR_COUNT] = {
+static UART_HandleTypeDef* uart_handles[3] = {
     &huart1,
     &huart2,
     &huart3
 };
 
 #define PACKET_SIZE 8
-#define TIMEOUT_MS  100
-
-#define RESP_HEADER1 0xAA
-#define RESP_HEADER2 0xAA
+#define TIMEOUT_MS  5000
 
 void sensors_init() {
 
@@ -64,6 +61,6 @@ static uint16_t read_sensor_packet(UART_HandleTypeDef *huart) {
     return distance;
 }
 
-uint16_t sensor_get_distance_front(void) { return sensor_get_distance(0); }
-uint16_t sensor_get_distance_left(void)  { return sensor_get_distance(1); }
-uint16_t sensor_get_distance_right(void) { return sensor_get_distance(2); }
+uint16_t sensor_get_distance_front(void) { return read_sensor_packet(uart_handles[0]); }
+uint16_t sensor_get_distance_left(void)  { return read_sensor_packet(uart_handles[1]); }
+uint16_t sensor_get_distance_right(void) { return read_sensor_packet(uart_handles[2]); }

@@ -16,12 +16,12 @@ static bool is_calibrated = false;
 
 // Чтение 14 байт (акселерометр + температура + гироскоп)
 static HAL_StatusTypeDef mpu_read_all(uint8_t *buffer) {
-    return HAL_I2C_Mem_Read(&hi2c1, MPU6500_ADDR, ACCEL_OUT_REG, I2C_MEMADD_SIZE_8BIT, buffer, 14, 100);
+    return HAL_I2C_Mem_Read(&hi2c1, MPU6500_ADDR, ACCEL_OUT_REG, I2C_MEMADD_SIZE_8BIT, buffer, 14, 2000);
 }
 
 // Запись одного байта в регистр
 static HAL_StatusTypeDef mpu_write_reg(uint8_t reg, uint8_t value) {
-    return HAL_I2C_Mem_Write(&hi2c1, MPU6500_ADDR, reg, I2C_MEMADD_SIZE_8BIT, &value, 1, 100);
+    return HAL_I2C_Mem_Write(&hi2c1, MPU6500_ADDR, reg, I2C_MEMADD_SIZE_8BIT, &value, 1, 2000);
 }
 
 // Калибровка смещения гироскопа (усреднение 100 измерений)
@@ -45,9 +45,7 @@ static void calibrate_gyro(void) {
 
 bool imu_init(void) {
     uint8_t whoami = 0;
-    if (HAL_I2C_Mem_Read(&hi2c1, MPU6500_ADDR, WHO_AM_I_REG, I2C_MEMADD_SIZE_8BIT, &whoami, 1, 100) != HAL_OK)
-        return false;
-    if (whoami != 0x70 && whoami != 0x68)  // MPU6500 обычно 0x70, но бывает 0x68
+    if (HAL_I2C_Mem_Read(&hi2c1, MPU6500_ADDR, WHO_AM_I_REG, I2C_MEMADD_SIZE_8BIT, &whoami, 1, 2000) != HAL_OK)
         return false;
 
     // 2. Вывести из сна (PWR_MGMT_1 = 0)

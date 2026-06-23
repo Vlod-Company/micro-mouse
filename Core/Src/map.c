@@ -26,7 +26,7 @@ void map_init(maze_t* maze, uint16_t width, uint16_t height,
     // Инициализация: все стены присутствуют (биты 0-3 = 1)
     uint16_t total = width * height;
     for (uint16_t i = 0; i < total; i++) {
-        walls_buf[i]   = 0x0F;   // биты N,E,S,W = 1
+        walls_buf[i]   = 0x00;   // биты N,E,S,W = 1
         weights_buf[i] = INF;
         visited_buf[i] = 0;
     }
