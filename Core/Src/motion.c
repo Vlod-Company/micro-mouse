@@ -18,8 +18,8 @@
 #define TICKS_PER_MM        (TICKS_PER_REV / WHEEL_CIRCUMFERENCE)
 
 // ========== Скорости ==========
-#define BASE_SPEED_FORWARD   750
-#define BASE_SPEED_BACKWARD -750
+#define BASE_SPEED_FORWARD   700
+#define BASE_SPEED_BACKWARD  -800
 
 // ========== ПИД-регулятор ==========
 typedef struct {
@@ -106,7 +106,7 @@ void move_forward(int32_t distance_mm) {
         float correction = pid_update(&pid_straight, error, dt);
 
         int16_t left_speed  = (int16_t)(base_speed - correction);
-        int16_t right_speed = (int16_t)(base_speed + correction);
+        int16_t right_speed = (int16_t)(base_speed + correction + 100);
 
         motor_set_speed(left_speed, right_speed);
         HAL_Delay((uint32_t)(dt * 1000.0f));
@@ -127,8 +127,8 @@ void turn_degrees(int16_t angle_deg) {
     const float dt     = 0.01f;    // период цикла — 10 мс
 
     // Минимальная и максимальная скорость поворота (по модулю)
-    const float MIN_TURN_SPEED = 750.0f;
-    const float MAX_TURN_SPEED = 999.0f;
+    const float MIN_TURN_SPEED = 650.0f;
+    const float MAX_TURN_SPEED = 650.0f;
 
     while (1) {
         float current = imu_get_yaw();
@@ -147,8 +147,14 @@ void turn_degrees(int16_t angle_deg) {
             if (output > -MIN_TURN_SPEED) output = -MIN_TURN_SPEED;
         }
 
+        float output_rigth = output;
+
+        if (output_rigth > 0.0f) output_rigth -= 50;
+        else if (output_rigth == 0.0f) output_rigth = output_rigth;
+        else output_rigth -= 50;
+
         // Дифференциальный поворот: один мотор вперёд, другой назад
-        motor_set_speed((int16_t)(-output), (int16_t)(output));
+        motor_set_speed((int16_t)(output), (int16_t)(-output_rigth));
         HAL_Delay((uint32_t)(dt * 1000.0f));
     }
 
@@ -165,7 +171,7 @@ void turn_to_direction(direction_t target, direction_t current) {
     if (delta >  2) delta -= 4;
     if (delta < -2) delta += 4;
 
-    turn_degrees((int16_t)(delta * 90));
+    turn_degrees((int16_t)-(delta * 90));
 }
 
 // ========== Публичные геттеры энкодеров ==========

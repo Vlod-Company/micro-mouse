@@ -18,15 +18,13 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define MAZE_WIDTH          2      // ширина лабиринта в клетках (поправьте под свой)
-#define MAZE_HEIGHT         3      // высота лабиринта в клетках (поправьте под свой)
+#define MAZE_WIDTH          3      // ширина лабиринта в клетках (поправьте под свой)
+#define MAZE_HEIGHT         2      // высота лабиринта в клетках (поправьте под свой)
 
-#define WALL_THRESHOLD_MM   80      // если сенсор видит препятствие ближе этого -> стена
-#define CELL_SIZE_MM        160     // длина одной клетки лабиринта в мм (используется в move_forward)
+#define WALL_THRESHOLD_MM   70      // если сенсор видит препятствие ближе этого -> стена
+#define CELL_SIZE_MM        650     // длина одной клетки лабиринта в мм (используется в move_forward)
 
-// Старт всегда (0,0), смотрит на North. Цель для первого прохода ставим
-// в "центр" лабиринта (классика micromouse) -- поправьте под свою задачу.
-#define START_X             0
+#define START_X             2
 #define START_Y             0
 #define START_DIR           DIR_NORTH
 
@@ -273,7 +271,7 @@ int main(void)
       Error_Handler();
   }
 
-  map_init(&maze, MAZE_WIDTH, MAZE_HEIGHT, 0, 2,
+  map_init(&maze, MAZE_WIDTH, MAZE_HEIGHT, 0, 1,
             walls_buf, weights_buf, visited_buf);
 
   current_x = START_X;
@@ -282,8 +280,14 @@ int main(void)
 
   HAL_Delay(500);
 
+//  move_forward(CELL_SIZE_MM);
+//
+//  turn_degrees(-95);
+//
+//  move_forward(CELL_SIZE_MM);
+//
+//  move_forward(CELL_SIZE_MM);
   explore_maze();
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
