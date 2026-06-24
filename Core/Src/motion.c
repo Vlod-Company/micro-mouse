@@ -5,17 +5,23 @@
 #include <math.h>
 #include <stdlib.h>
 
-// ========== Конфигурация (подберите под свой робот) ==========
-// Коэффициент пересчёта тиков энкодера в миллиметры
-// Если при 1333 тиках (тестовый код) проезжали 180 мм, то:
-// TICKS_PER_MM = 1333 / 180 = 7.405555...
-#define TICKS_PER_MM        1.4056f
+// ========== Физические параметры робота ==========
+// Замените на реальные характеристики своего мотора и колёс
 
-// Базовая скорость движения (0..MAX_PWM, где MAX_PWM=1000)
-#define BASE_SPEED_FORWARD  750
+#define WHEEL_DIAMETER_MM   34.0f   // диаметр колеса в мм
+#define ENCODER_PPR         7       // импульсов на оборот вала МОТОРА (до редуктора)
+#define GEAR_RATIO          97.0f   // передаточное число редуктора
+
+// Вычисляемые константы (не трогать)
+#define TICKS_PER_REV       ((float)ENCODER_PPR * GEAR_RATIO)
+#define WHEEL_CIRCUMFERENCE (M_PI * WHEEL_DIAMETER_MM)
+#define TICKS_PER_MM        (TICKS_PER_REV / WHEEL_CIRCUMFERENCE)
+
+// ========== Скорости ==========
+#define BASE_SPEED_FORWARD   750
 #define BASE_SPEED_BACKWARD -750
 
-// ПИД для удержания прямой (по разнице энкодеров)
+// ========== ПИД-регулятор ==========
 typedef struct {
     float kp;
     float ki;
@@ -24,94 +30,128 @@ typedef struct {
     float prev_error;
 } PID;
 
-static PID pid_straight = {1.2f, 0.02f, 0.5f, 0.0f, 0.0f};
+// Коэффициенты подобраны экспериментально — при необходимости скорректируйте
+static PID pid_straight = {
+    .kp         = 1.2f,
+    .ki         = 0.02f,
+    .kd         = 0.5f,
+    .integral   = 0.0f,
+    .prev_error = 0.0f,
+};
 
-extern TIM_HandleTypeDef htim3;
+extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim5;
 
+// ========== Энкодеры ==========
 static inline int32_t get_left_encoder(void) {
     return (int32_t)__HAL_TIM_GET_COUNTER(&htim5);
 }
+
 static inline int32_t get_right_encoder(void) {
-    return (int32_t)__HAL_TIM_GET_COUNTER(&htim3);
-}
-static inline void reset_encoders(void) {
-    __HAL_TIM_SET_COUNTER(&htim3, 0);
-    __HAL_TIM_SET_COUNTER(&htim5, 0);
+    return (int32_t)__HAL_TIM_GET_COUNTER(&htim2);
 }
 
-// ========== ПИД-регулятор ==========
+// Сброс состояния ПИД перед новым движением
+static void pid_reset(PID *pid) {
+    pid->integral   = 0.0f;
+    pid->prev_error = 0.0f;
+}
+
+// Шаг ПИД-регулятора
 static float pid_update(PID *pid, float error, float dt) {
     pid->integral += error * dt;
+
     // Анти-виндап
-    if (pid->integral > 500.0f) pid->integral = 500.0f;
+    if (pid->integral >  500.0f) pid->integral =  500.0f;
     if (pid->integral < -500.0f) pid->integral = -500.0f;
+
     float derivative = (error - pid->prev_error) / dt;
     pid->prev_error = error;
+
     return pid->kp * error + pid->ki * pid->integral + pid->kd * derivative;
 }
 
-// ========== Движение вперёд/назад ==========
+// ========== Движение вперёд / назад ==========
 void move_forward(int32_t distance_mm) {
     if (distance_mm == 0) return;
-    bool forward = (distance_mm > 0);
-    int32_t target_ticks = (int32_t)((float)abs(distance_mm) * TICKS_PER_MM);
-    reset_encoders();
 
-    int16_t base_speed = forward ? BASE_SPEED_FORWARD : BASE_SPEED_BACKWARD;
-    float dt = 0.02f;   // 20 мс цикл
+    // Сбрасываем ПИД, чтобы накопленный интеграл предыдущего движения
+    // не влиял на текущее
+    pid_reset(&pid_straight);
+
+    // Целевое количество тиков (всегда положительное)
+    int32_t target_ticks = (int32_t)((float)abs(distance_mm) * TICKS_PER_MM);
+
+    // Запоминаем стартовые позиции энкодеров.
+    // Это позволяет корректно работать и при движении назад
+    // (счётчик убывает), и при любом начальном значении счётчика.
+    int32_t left_start  = get_left_encoder();
+    int32_t right_start = get_right_encoder();
+
+    int16_t base_speed = (distance_mm > 0) ? BASE_SPEED_FORWARD : BASE_SPEED_BACKWARD;
+    const float dt = 0.02f;   // период цикла управления — 20 мс
 
     while (1) {
-        int32_t left = get_left_encoder();
-        int32_t right = get_right_encoder();
-        int32_t avg = (abs(left) + abs(right)) / 2;
+        // Пройденное расстояние в тиках (со знаком) относительно старта
+        int32_t left_delta  = get_left_encoder()  - left_start;
+        int32_t right_delta = get_right_encoder() - right_start;
 
-        // Проверка достижения цели
-        if (abs(avg) >= target_ticks) break;
+        // Среднее пройденное (модуль — нам важна дистанция, а не направление)
+        int32_t avg = (abs(left_delta) + abs(right_delta)) / 2;
 
-        // Ошибка прямолинейности: если left > right, то робот поворачивает направо
-        int32_t diff = left - right;
-        float correction = pid_update(&pid_straight, (float)diff, dt);
+        if (avg >= target_ticks) break;
+
+        // Ошибка прямолинейности: левый опережает правый → надо притормозить левый
+        float error = (float)(left_delta - right_delta);
+        float correction = pid_update(&pid_straight, error, dt);
 
         int16_t left_speed  = (int16_t)(base_speed - correction);
         int16_t right_speed = (int16_t)(base_speed + correction);
 
         motor_set_speed(left_speed, right_speed);
-        HAL_Delay((uint32_t)(dt * 1000));
+        HAL_Delay((uint32_t)(dt * 1000.0f));
     }
+
     motor_brake();
-    HAL_Delay(20);   // небольшая пауза для стабилизации
+    HAL_Delay(20);
 }
 
 // ========== Поворот на угол (гироскоп) ==========
 void turn_degrees(int16_t angle_deg) {
     if (angle_deg == 0) return;
+
     imu_reset_yaw();
-    float target = (float)angle_deg;
-    float kp = 10.0f;       // подобрать экспериментально (0.5..3.0)
-    float dt = 0.01f;      // 10 мс
-    float error;
+
+    const float target = (float)angle_deg;
+    const float kp     = 10.0f;    // пропорциональный коэффициент; подберите под свой робот
+    const float dt     = 0.01f;    // период цикла — 10 мс
+
+    // Минимальная и максимальная скорость поворота (по модулю)
+    const float MIN_TURN_SPEED = 750.0f;
+    const float MAX_TURN_SPEED = 999.0f;
 
     while (1) {
         float current = imu_get_yaw();
-        error = target - current;
-        if (fabsf(error) < 0.8f) break;  // точность 0.8 градуса
+        float error   = target - current;
+
+        if (fabsf(error) < 0.8f) break;   // точность ±0.8°
 
         float output = kp * error;
-        // Ограничиваем скорость поворота
-        if (output > 0) {
-        	if (output > 999.0f) output = 999.0f;
-        	if (output < 750.0f) output = 750.0f;
-        }
-        else {
-        	if (output < -999.0f) output = -999.0f;
-        	if (output > -750.0f) output = -750.0f;
+
+        // Насыщение: ограничиваем диапазон [MIN..MAX] с сохранением знака
+        if (output > 0.0f) {
+            if (output > MAX_TURN_SPEED) output = MAX_TURN_SPEED;
+            if (output < MIN_TURN_SPEED) output = MIN_TURN_SPEED;
+        } else {
+            if (output < -MAX_TURN_SPEED) output = -MAX_TURN_SPEED;
+            if (output > -MIN_TURN_SPEED) output = -MIN_TURN_SPEED;
         }
 
-        // Дифференциальный поворот: левый едет назад, правый вперёд
+        // Дифференциальный поворот: один мотор вперёд, другой назад
         motor_set_speed((int16_t)(-output), (int16_t)(output));
-        HAL_Delay((uint32_t)(dt * 1000));
+        HAL_Delay((uint32_t)(dt * 1000.0f));
     }
+
     motor_brake();
     HAL_Delay(20);
 }
@@ -119,12 +159,15 @@ void turn_degrees(int16_t angle_deg) {
 // ========== Поворот по направлениям (для flood fill) ==========
 void turn_to_direction(direction_t target, direction_t current) {
     int8_t delta = (int8_t)(target - current);
-    // Нормализуем в диапазон [-2, 2]
-    if (delta > 2) delta -= 4;
+
+    // Нормализуем в диапазон [-2, 2]:
+    // 3 шага вправо == 1 шаг влево, и т.д.
+    if (delta >  2) delta -= 4;
     if (delta < -2) delta += 4;
-    int16_t angle = delta * 90;   // 90° на одно направление
-    turn_degrees(angle);
+
+    turn_degrees((int16_t)(delta * 90));
 }
 
-int32_t get_left_encoder_ticks(void) { return get_left_encoder(); }
+// ========== Публичные геттеры энкодеров ==========
+int32_t get_left_encoder_ticks(void)  { return get_left_encoder();  }
 int32_t get_right_encoder_ticks(void) { return get_right_encoder(); }

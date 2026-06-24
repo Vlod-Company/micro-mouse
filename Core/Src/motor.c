@@ -8,9 +8,9 @@
 #define LEFT_IN2_CH   TIM_CHANNEL_2
 
 // Правый мотор: TIM3, канал 1 = IN3, канал 2 = IN4
-#define RIGHT_TIM     &htim2
-#define RIGHT_IN1_CH  TIM_CHANNEL_1
-#define RIGHT_IN2_CH  TIM_CHANNEL_2
+#define RIGHT_TIM     &htim3
+#define RIGHT_IN1_CH  TIM_CHANNEL_2
+#define RIGHT_IN2_CH  TIM_CHANNEL_1
 
 #define MAX_PWM 1000   // должно совпадать с периодом таймера (ARR) в CubeMX
 

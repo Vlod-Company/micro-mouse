@@ -135,7 +135,7 @@ static void move_one_cell(direction_t dir) {
     turn_to_direction(dir, current_direction);
     current_direction = dir;
 
-    move_forward(CELL_SIZE_MM * 100);
+    move_forward(CELL_SIZE_MM);
 
     current_x = (uint16_t)((int16_t)current_x + DX[dir]);
     current_y = (uint16_t)((int16_t)current_y + DY[dir]);
@@ -282,6 +282,8 @@ int main(void)
 
   HAL_Delay(500);
 
+  explore_maze();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -291,10 +293,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
-	  move_forward(160 * 300);
-
-	  __NOP();
+	  HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
@@ -479,7 +478,7 @@ static void MX_TIM2_Init(void)
   htim2.Init.Period = 4294967295;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  sConfig.EncoderMode = TIM_ENCODERMODE_TI1;
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
   sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
   sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
@@ -499,8 +498,7 @@ static void MX_TIM2_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM2_Init 2 */
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
+  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
 
   /* USER CODE END TIM2_Init 2 */
 
@@ -527,7 +525,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 0;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 65535;
+  htim3.Init.Period = 999;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
@@ -553,7 +551,8 @@ static void MX_TIM3_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM3_Init 2 */
-  HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
 
   /* USER CODE END TIM3_Init 2 */
   HAL_TIM_MspPostInit(&htim3);
