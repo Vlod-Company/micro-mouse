@@ -1,11 +1,3 @@
-/*
- * sensors.c
- *
- *  Created on: Jun 5, 2026
- *      Author: vlad_
- */
-
-
 #include "sensors.h"
 #include "main.h"
 
@@ -30,7 +22,6 @@ static uint16_t read_sensor_packet(UART_HandleTypeDef *huart) {
 
 	for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++)
 	{
-		// ищем 5A
 		status = HAL_UART_Receive(huart, &b, 1, BYTE_TIMEOUT_MS);
 		if (status != HAL_OK)
 			continue;
@@ -40,7 +31,6 @@ static uint16_t read_sensor_packet(UART_HandleTypeDef *huart) {
 
 		packet[0] = 0x5A;
 
-		// второй байт должен быть 5A
 		status = HAL_UART_Receive(huart, &packet[1], 1, BYTE_TIMEOUT_MS);
 		if (status != HAL_OK)
 			continue;
@@ -48,7 +38,6 @@ static uint16_t read_sensor_packet(UART_HandleTypeDef *huart) {
 		if (packet[1] != 0x5A)
 			continue;
 
-		// третий байт должен быть 15
 		status = HAL_UART_Receive(huart, &packet[2], 1, BYTE_TIMEOUT_MS);
 		if (status != HAL_OK)
 			continue;
@@ -56,7 +45,6 @@ static uint16_t read_sensor_packet(UART_HandleTypeDef *huart) {
 		if (packet[2] != 0x15)
 			continue;
 
-		// четвертый байт должен быть 03
 		status = HAL_UART_Receive(huart, &packet[3], 1, BYTE_TIMEOUT_MS);
 		if (status != HAL_OK)
 			continue;
@@ -64,7 +52,6 @@ static uint16_t read_sensor_packet(UART_HandleTypeDef *huart) {
 		if (packet[3] != 0x03)
 			continue;
 
-		// дочитываем DH DL MODE SUM
 		status = HAL_UART_Receive(huart, &packet[4], 4, BYTE_TIMEOUT_MS);
 		if (status != HAL_OK)
 			continue;

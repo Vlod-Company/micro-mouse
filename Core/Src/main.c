@@ -18,11 +18,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define MAZE_WIDTH          3      // ширина лабиринта в клетках (поправьте под свой)
-#define MAZE_HEIGHT         2      // высота лабиринта в клетках (поправьте под свой)
+#define MAZE_WIDTH          3
+#define MAZE_HEIGHT         2
 
-#define WALL_THRESHOLD_MM   70      // если сенсор видит препятствие ближе этого -> стена
-#define CELL_SIZE_MM        650     // длина одной клетки лабиринта в мм (используется в move_forward)
+#define WALL_THRESHOLD_MM   70
+#define CELL_SIZE_MM        650
 
 #define START_X             2
 #define START_Y             0
@@ -77,27 +77,17 @@ static void MX_TIM5_Init(void);
 static const int8_t DX[4] = {0, 1, 0, -1};
 static const int8_t DY[4] = {-1, 0, 1, 0};
 
-// Переводит измеренное расстояние датчика в "есть стена / нет стены"
 static inline bool distance_means_wall(uint16_t distance_mm) {
-    // 0xFFFF -- код ошибки чтения сенсора; в таком случае считаем,
-    // что стену не обнаружили достоверно, и НЕ ставим стену,
-    // чтобы один сбойный кадр не запер клетку навсегда.
     if (distance_mm == 0xFFFF) return false;
     return distance_mm < WALL_THRESHOLD_MM;
 }
 
-// Поворот абсолютного направления robot-relative на dir_offset позиций
-// (используется чтобы понять, какой ГЛОБАЛЬНОЙ стороне света соответствует
-// сенсор "left"/"right", когда робот смотрит в current_direction)
 static inline direction_t rotate_direction(direction_t base, int8_t steps) {
     int8_t result = ((int8_t)base + steps) % 4;
     if (result < 0) result += 4;
     return (direction_t)result;
 }
 
-// Считывает три сенсора, переводит их в глобальные стороны света
-// относительно current_direction, и записывает стены в карту для
-// текущей клетки (заодно помечает её как посещённую).
 static void scan_and_record_walls(void) {
     uint16_t dist_front = sensor_get_distance_front();
     uint16_t dist_left  = sensor_get_distance_left();
@@ -113,9 +103,6 @@ static void scan_and_record_walls(void) {
     bool wall_left  = distance_means_wall(dist_left);
     bool wall_right = distance_means_wall(dist_right);
 
-    // front сенсор смотрит вдоль current_direction,
-    // left -- это current_direction повёрнутое на -90° (против часовой),
-    // right -- current_direction + 90° (по часовой)
     direction_t global_front = current_direction;
     direction_t global_left  = rotate_direction(current_direction, -1);
     direction_t global_right = rotate_direction(current_direction, +1);
@@ -127,8 +114,6 @@ static void scan_and_record_walls(void) {
     map_set_visited(&maze, current_x, current_y);
 }
 
-// Поворачивает робота в направлении dir и проезжает ровно одну клетку.
-// Обновляет current_direction и current_x/current_y.
 static void move_one_cell(direction_t dir) {
     turn_to_direction(dir, current_direction);
     current_direction = dir;
@@ -139,17 +124,8 @@ static void move_one_cell(direction_t dir) {
     current_y = (uint16_t)((int16_t)current_y + DY[dir]);
 }
 
-// Ищет ближайшую (по весу карты) достижимую непосещённую клетку.
-// Простой BFS-обход по весам, уже посчитанным map_compute_weights:
-// идём от current_x/current_y каждый раз в соседа с минимальным весом,
-// пока не наткнёмся на непосещённую клетку, либо пока не убедимся, что
-// её достичь нельзя.
-//
-// ВАЖНО: для построения карты мы временно используем "цель" как саму
-// текущую клетку (вес=0 в ней), чтобы веса росли по мере удаления --
-// тогда соседи с наименьшим весом будут самыми близкими непосещёнными.
+
 static bool find_nearest_unvisited(uint16_t *out_x, uint16_t *out_y) {
-    // Пересчитываем веса относительно ТЕКУЩЕЙ позиции робота
     uint16_t saved_goal_x = maze.goal_x;
     uint16_t saved_goal_y = maze.goal_y;
     maze.goal_x = current_x;
@@ -166,7 +142,7 @@ static bool find_nearest_unvisited(uint16_t *out_x, uint16_t *out_y) {
         for (uint16_t x = 0; x < maze.width; x++) {
             if (map_is_visited(&maze, x, y)) continue;
             uint16_t w = map_get_weight(&maze, x, y);
-            if (w == 0xFFFF) continue; // недостижима пока что
+            if (w == 0xFFFF) continue;
             if (w < best_weight) {
                 best_weight = w;
                 best_x = x;
@@ -183,42 +159,27 @@ static bool find_nearest_unvisited(uint16_t *out_x, uint16_t *out_y) {
     return found;
 }
 
-// Основной цикл построения карты методом flood-fill:
-// 1. сканируем стены вокруг текущей клетки, помечаем её посещённой
-// 2. ищем ближайшую недостигнутую непосещённую клетку
-// 3. пересчитываем веса от текущей клетки к этой цели
-// 4. идём к ней шаг за шагом, на каждом шаге выбирая лучшего соседа
-// 5. повторяем, пока недостижимых непосещённых клеток не останется
 static void explore_maze(void) {
     while (1) {
         scan_and_record_walls();
 
         uint16_t target_x, target_y;
         if (!find_nearest_unvisited(&target_x, &target_y)) {
-            // Все достижимые клетки посещены -- карта построена (в пределах достижимости)
             break;
         }
 
-        // Веса относительно цели -- чтобы на каждом шаге двигаться
-        // в сторону уменьшения веса (классический flood-fill спуск)
         uint16_t saved_goal_x = maze.goal_x;
         uint16_t saved_goal_y = maze.goal_y;
         maze.goal_x = target_x;
         maze.goal_y = target_y;
         map_compute_weights(&maze);
 
-        // Идём пока не дойдём до целевой клетки или не застрянем
         while (current_x != target_x || current_y != target_y) {
             direction_t next_dir = map_get_best_neighbor(&maze, current_x, current_y);
             if (next_dir == 0xFF) {
-                // Застряли (не должно происходить, т.к. вес был конечен,
-                // но на случай гонки данных после нового скана -- выходим)
                 break;
             }
             move_one_cell(next_dir);
-
-            // На каждой промежуточной клетке тоже сканируем стены --
-            // это может открыть более короткий путь и уточняет карту
             scan_and_record_walls();
         }
 
@@ -280,13 +241,6 @@ int main(void)
 
   HAL_Delay(500);
 
-//  move_forward(CELL_SIZE_MM);
-//
-//  turn_degrees(-95);
-//
-//  move_forward(CELL_SIZE_MM);
-//
-//  move_forward(CELL_SIZE_MM);
   explore_maze();
   /* USER CODE END 2 */
 

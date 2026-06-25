@@ -1,10 +1,3 @@
-/*
- * sensors.h
- *
- *  Created on: Jun 5, 2026
- *      Author: vlad_
- */
-
 #ifndef SENSORS_H
 #define SENSORS_H
 

@@ -2,12 +2,10 @@
 
 #define INF 0xFFFF
 
-// Максимальное количество клеток для BFS (можно менять под свой лабиринт)
 #ifndef MAP_MAX_CELLS
-#define MAP_MAX_CELLS 1024   // достаточно для 32x32
+#define MAP_MAX_CELLS 1024
 #endif
 
-// Вспомогательная функция: получить индекс в одномерном массиве
 static inline uint16_t idx(maze_t* maze, uint16_t x, uint16_t y) {
     return y * maze->width + x;
 }
@@ -23,10 +21,9 @@ void map_init(maze_t* maze, uint16_t width, uint16_t height,
     maze->weights = weights_buf;
     maze->visited = visited_buf;
 
-    // Инициализация: все стены присутствуют (биты 0-3 = 1)
     uint16_t total = width * height;
     for (uint16_t i = 0; i < total; i++) {
-        walls_buf[i]   = 0x00;   // биты N,E,S,W = 1
+        walls_buf[i]   = 0x00;
         weights_buf[i] = INF;
         visited_buf[i] = 0;
     }
@@ -61,24 +58,20 @@ bool map_is_visited(maze_t* maze, uint16_t x, uint16_t y) {
 
 void map_compute_weights(maze_t* maze) {
     uint16_t total = maze->width * maze->height;
-    // Сброс весов в бесконечность
     for (uint16_t i = 0; i < total; i++) {
         maze->weights[i] = INF;
     }
 
-    // Статическая очередь (максимальный размер)
     uint16_t queue_x[MAP_MAX_CELLS];
     uint16_t queue_y[MAP_MAX_CELLS];
     uint16_t head = 0, tail = 0;
 
-    // Старт с целевой клетки
     uint16_t goal_idx = idx(maze, maze->goal_x, maze->goal_y);
     maze->weights[goal_idx] = 0;
     queue_x[tail] = maze->goal_x;
     queue_y[tail] = maze->goal_y;
     tail++;
 
-    // Смещения для направлений (N, E, S, W)
     const int8_t dx[4] = {0, 1, 0, -1};
     const int8_t dy[4] = {-1, 0, 1, 0};
 
@@ -100,7 +93,7 @@ void map_compute_weights(maze_t* maze) {
                             queue_x[tail] = (uint16_t)nx;
                             queue_y[tail] = (uint16_t)ny;
                             tail++;
-                        } // иначе очередь переполнена – увеличить MAP_MAX_CELLS
+                        }
                     }
                 }
             }
@@ -117,7 +110,7 @@ direction_t map_get_best_neighbor(maze_t* maze, uint16_t x, uint16_t y) {
     const int8_t dx[4] = {0, 1, 0, -1};
     const int8_t dy[4] = {-1, 0, 1, 0};
     uint16_t best_weight = INF;
-    direction_t best_dir = 0xFF; // недопустимое направление
+    direction_t best_dir = 0xFF;
 
     for (direction_t d = 0; d < 4; d++) {
         if (!map_is_wall(maze, x, y, d)) {
@@ -129,7 +122,6 @@ direction_t map_get_best_neighbor(maze_t* maze, uint16_t x, uint16_t y) {
                     best_weight = w;
                     best_dir = d;
                 } else if (w == best_weight && best_dir != 0xFF) {
-                    // При равных весах предпочитаем непосещённую клетку
                     bool curr_visited = map_is_visited(maze, (uint16_t)nx, (uint16_t)ny);
                     int16_t best_nx = (int16_t)x + dx[best_dir];
                     int16_t best_ny = (int16_t)y + dy[best_dir];
